@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .base import Provider, ProviderError, ToolCall, ToolResult, ToolSpec, Turn
+from .base import Provider, ProviderError, ToolCall, ToolResult, ToolSpec, Turn, Usage
 
 PROVIDERS = ("lemonade", "ollama", "gemini")
 
@@ -22,4 +22,4 @@ def create_provider(settings, system_prompt: str) -> Provider:
     raise ProviderError(f"Unknown LLM_PROVIDER '{name}'. Use one of: {', '.join(PROVIDERS)}.")
 
 
-__all__ = ["Provider", "ProviderError", "ToolCall", "ToolResult", "ToolSpec", "Turn", "create_provider", "PROVIDERS"]
+__all__ = ["Provider", "ProviderError", "ToolCall", "ToolResult", "ToolSpec", "Turn", "Usage", "create_provider", "PROVIDERS"]

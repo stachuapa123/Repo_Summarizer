@@ -20,7 +20,7 @@ import httpx
 import ollama
 from ollama import AsyncClient
 
-from .base import Provider, ProviderError, ThinkFilter, ToolCall, ToolResult, Turn
+from .base import Provider, ProviderError, ThinkFilter, ToolCall, ToolResult, Turn, Usage
 
 
 class OllamaProvider(Provider):
@@ -82,6 +82,7 @@ class OllamaProvider(Provider):
         think = ThinkFilter()
         text: list[str] = []
         calls: list[ToolCall] = []
+        usage = Usage()
 
         def emit(pieces):
             for kind, piece in pieces:
@@ -93,6 +94,12 @@ class OllamaProvider(Provider):
 
         try:
             async for part in await self.client.chat(**kwargs):
+                if part.done:
+                    # Ollama's last chunk has exact counts and timings
+                    # (durations are in nanoseconds).
+                    usage = Usage(output_tokens=part.eval_count, prompt_tokens=part.prompt_eval_count)
+                    if part.eval_count and part.eval_duration:
+                        usage.server_tokens_per_second = part.eval_count / (part.eval_duration / 1e9)
                 msg = part.message
                 if getattr(msg, "thinking", None):
                     on_thinking(msg.thinking)
@@ -114,7 +121,7 @@ class OllamaProvider(Provider):
             raise ProviderError(f"Ollama returned an error ({e.status_code}): {e.error}{hint}") from None
         emit(think.flush())
 
-        turn = Turn(text="".join(text).strip(), tool_calls=calls)
+        turn = Turn(text="".join(text).strip(), tool_calls=calls, usage=usage)
         msg: dict = {"role": "assistant", "content": turn.text}
         if calls:
             msg["tool_calls"] = [{"function": {"name": c.name, "arguments": c.arguments or {}}} for c in calls]

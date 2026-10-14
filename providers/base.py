@@ -47,9 +47,19 @@ class ToolResult:
 
 
 @dataclass
+class Usage:
+    """Token counts for one reply, as far as the server reports them."""
+    output_tokens: int | None = None      # answer + thinking tokens
+    prompt_tokens: int | None = None      # everything sent in (history, tools, ...)
+    server_tokens_per_second: float | None = None  # when the server measures speed itself
+    exact: bool = True                    # False when output_tokens is only an estimate
+
+
+@dataclass
 class Turn:
     text: str = ""
     tool_calls: list[ToolCall] = field(default_factory=list)
+    usage: Usage = field(default_factory=Usage)
 
 
 class Provider(ABC):

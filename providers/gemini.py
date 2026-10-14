@@ -20,7 +20,7 @@ import json
 from google import genai
 from google.genai import errors, types
 
-from .base import Provider, ProviderError, ToolCall, ToolResult, Turn
+from .base import Provider, ProviderError, ToolCall, ToolResult, Turn, Usage
 
 
 class GeminiProvider(Provider):
@@ -86,11 +86,19 @@ class GeminiProvider(Provider):
         text: list[str] = []
         calls: list[ToolCall] = []
         finish = None
+        usage = Usage()
         try:
             stream = await self.client.aio.models.generate_content_stream(
                 model=self.model, contents=self.contents, config=self._config()
             )
             async for chunk in stream:
+                # Gemini sends running token counts; the last chunk has the totals.
+                meta = chunk.usage_metadata
+                if meta and (meta.candidates_token_count or meta.thoughts_token_count):
+                    usage = Usage(
+                        output_tokens=(meta.candidates_token_count or 0) + (meta.thoughts_token_count or 0),
+                        prompt_tokens=meta.prompt_token_count,
+                    )
                 if not chunk.candidates:
                     continue
                 cand = chunk.candidates[0]
@@ -121,7 +129,7 @@ class GeminiProvider(Provider):
             note = f"[Gemini returned no content (finish reason: {finish})]"
             on_text(note)
             text.append(note)
-        return Turn(text="".join(text).strip(), tool_calls=calls)
+        return Turn(text="".join(text).strip(), tool_calls=calls, usage=usage)
 
     def add_tool_results(self, results: list[ToolResult]) -> None:
         parts = []

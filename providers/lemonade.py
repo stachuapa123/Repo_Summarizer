@@ -18,7 +18,7 @@ import json
 import openai
 from openai import AsyncOpenAI
 
-from .base import Provider, ProviderError, ThinkFilter, ToolCall, ToolResult, Turn
+from .base import Provider, ProviderError, ThinkFilter, ToolCall, ToolResult, Turn, Usage
 
 
 class LemonadeProvider(Provider):
@@ -89,11 +89,29 @@ class LemonadeProvider(Provider):
                     text.append(piece)
                     on_text(piece)
 
+        usage = Usage(output_tokens=0, exact=False)
         async for chunk in stream:
+            # Token counts. The server may send them in an OpenAI-style "usage"
+            # object or in llama.cpp's own "timings" object (usually in the last
+            # chunk). If it sends neither, we count streamed chunks instead:
+            # llama.cpp streams about one token per chunk.
+            if getattr(chunk, "usage", None) and chunk.usage.completion_tokens:
+                usage.output_tokens = chunk.usage.completion_tokens
+                usage.prompt_tokens = chunk.usage.prompt_tokens
+                usage.exact = True
+            timings = (chunk.model_extra or {}).get("timings")
+            if isinstance(timings, dict) and timings.get("predicted_n"):
+                usage.output_tokens = timings["predicted_n"]
+                usage.prompt_tokens = timings.get("prompt_n", usage.prompt_tokens)
+                usage.server_tokens_per_second = timings.get("predicted_per_second")
+                usage.exact = True
+
             if not chunk.choices:
                 continue
             delta = chunk.choices[0].delta
             reasoning = getattr(delta, "reasoning_content", None)
+            if not usage.exact and (reasoning or delta.content or delta.tool_calls):
+                usage.output_tokens += 1
             if reasoning:
                 on_thinking(reasoning)
             if delta.content:
@@ -110,7 +128,7 @@ class LemonadeProvider(Provider):
                         slot["arguments"] += tc.function.arguments
         emit(think.flush())
 
-        turn = Turn(text="".join(text).strip())
+        turn = Turn(text="".join(text).strip(), usage=usage)
         for n, idx in enumerate(sorted(slots)):
             s = slots[idx]
             raw = s["arguments"].strip() or "{}"
