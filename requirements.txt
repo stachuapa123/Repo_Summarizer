@@ -1,0 +1,5 @@
+python-dotenv>=1.0
+httpx>=0.27
+openai>=1.40        # Lemonade
+ollama>=0.6         # Ollama
+google-genai>=2.0   # Gemini
